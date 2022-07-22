@@ -1,0 +1,84 @@
+#define A 20     //A상
+#define B 21     //B상
+#include <MsTimer2.h>
+
+int pos = 0;     //엔코더 위치 초기값
+int old_pos=0;
+int ppu=0;
+String rotateDirec="";
+
+
+void setup() {
+  pinMode(A,INPUT);     //A상 값
+  pinMode(B,INPUT);     //B상 값
+  attachInterrupt(3,BladeCountA,CHANGE);     //Mega 2560 pin 21의 interuppt pin 번호는 INT.2
+  attachInterrupt(2,BladeCountB,CHANGE);     //Mega 2560 pin 21의 interuppt pin 번호는 INT.3
+  Serial.begin(4800);     //시리얼 통신 시작
+
+  MsTimer2::set(50,timerISR);      //인터럽트 시작 50ms마다 timerISR 실행
+  MsTimer2::start();     //타이머 활성화
+}
+
+/*******************************************************************************************************/
+
+void BladeCountA() {
+  if(digitalRead(A)==HIGH) {     //A가 Rising 할 때
+    if(digitalRead(B)==LOW) {     //B가 Falling 한다면
+    pos ++;    //시계 방향으로 돌고
+    rotateDirec="cw";    //"cw" 출력
+    }else{     //B가 Rising한다면
+    pos --;    //반시계 방향으로 돌고
+    rotateDirec="ccw";    //"ccw" 출력
+    }
+  }
+  else{  //A가 Falling할 때
+    if(digitalRead(B)==HIGH) {     //B가 Rising 한다면
+    pos ++;     //시계 방향으로 돌고
+    rotateDirec="cw";     //"cw" 출력
+    }else{     //B가 Falling한다면
+    pos --;     //반시계 방향으로 돌고
+    rotateDirec="ccw";     //"ccw" 출력
+    }
+  }
+}
+
+/**************************************************************************************************************/
+
+void BladeCountB() {
+  if(digitalRead(B)==HIGH) {     //B가 Rising 할 때
+    if(digitalRead(A)==HIGH) {     //A가 Rising 한다면
+    pos ++;     //시계 방향으로 돌고
+    rotateDirec="cw";     //"cw" 출력
+    }else{     //B가 Falling한다면
+    pos --;     //반시계 방향으로 돌고
+    rotateDirec="ccw";     //"ccw" 출력
+    }
+  }
+  else{     //B가 Falling 할 때
+    if(digitalRead(A)==LOW) {     //A가 Falling 한다면
+    pos ++;     //시계 방향으로 돌고
+    rotateDirec="cw";     //"cw" 출력
+    }else{     //A가 Rising 한다면
+    pos --;     //반시계 방향으로 돌고
+    rotateDirec="ccw";     //"ccw" 출력
+    }
+  }
+}
+
+/************************************************************************************************************/
+
+void timerISR() {
+    ppu=(pos-old_pos);     //고속일 때 속도 측정에 유리한 M방식(1초 동안 펄스가 몇개 들어오는지)
+  old_pos=pos;
+}
+
+void loop() {
+  Serial.print("방향:");
+  Serial.print(rotateDirec);     //회전 방향 출력
+  Serial.print("  ");
+  Serial.print("위치:");
+  Serial.print(pos);     //위치 출력
+  Serial.print("  ");
+  Serial.print("ppu:");
+  Serial.println(ppu);     //ppu 출력
+}
