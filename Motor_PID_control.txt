@@ -1,0 +1,260 @@
+#define A 20     //A상 정의
+#define B 21     //B상 정의
+#include <MsTimer2.h>     //MsTimer2 라이브러리 포함
+
+int rotate_min = 95;     //(Dead zone):제어 입력을 넣어도 모터가 움직이지 않는 구간, 회전 시작하는 PWM 값
+int rotate_max = 255;
+int pulse_min = 9;     //PWM = rotate_min 일때 pulse 값
+int pulse_max = 61;     //PWM = rotate_max 일때 pulse 값
+
+int pos = 0;   //엔코더 위치 초기값
+int old_pos = 0;     //이전 위치
+int bottom_line = 0;     //그래프용
+double ppu = 0;     //pulse per unit time(20ms)
+double ppu_old = 0;
+
+double Kp = 6;     //P gain 값
+double Ki = 1;     //I gain 값
+double Kd = 1.5;     //D gain 값
+
+double current_ppu = 0;     //현재 속도
+double desired_ppu = 0;     //원하는 속도<<target에서 받아옴
+double old_desired_ppu = 0;     //이전에 입력된 속도; 오버슈팅 측정할 때 사용
+double increased_ppu = 0;      //증가한 ppu
+String Settle = "";     //X -> Settle X, O -> Settle O
+double highest = 0;     //오버슈팅 최대 값
+double lowest = 0;     //오버슈팅 최소 값
+double peak = 0;     //ppu 최댓값
+int tic = 0;     //시리얼 입력 후 타이머 측정
+int SettleTime = 0;     //정착 시간(안정 상태가 될때까지 걸린 시간)
+int old_SettleTime = 0;     //이전 정착 시간
+int SettleTimer = 0;     //정착 유지 시간을 재기 위한 타이머
+
+double target = 0;     //시리얼에서 원하는 속도를 입력
+double error = 0;     //오차 값
+double error_old;     //오차 예전 값(미분 조정에서 필요)
+double P_control, I_control, D_control;
+double PID_control;     
+int PWM = 0;     //PWM 값
+int PWM_Input;     //0~255로 제한된 PWM 값
+
+
+int clamping = 1;     //적분 제어 Clamping: Integral wind up 제어, 1 -> off, 0 -> on 
+int saturation = 0;     //모터 포화 상태 확인
+int PID_Error = 1;     //오차와 제어기 출력이 같은 부호인가 확인
+/************************************************************************************/
+
+void setup() {
+
+  pinMode(A, INPUT);     //A상 값
+  pinMode(B, INPUT);     //B상 값
+
+  pinMode(7, OUTPUT);     //정회전
+  pinMode(8, OUTPUT);     //역회전
+  
+  attachInterrupt(3, BladeCountA, CHANGE);     //인터럽트가 발생(신호가 바뀜)했을 때 ISR(인터럽트 처리 함수) 지정
+  attachInterrupt(2, BladeCountB, CHANGE);     //Mega2560에서 INT.2는 21번 핀, Mega2560에서 INT.3는 20번 핀
+  Serial.begin(9600);     //시리얼 통신 시작
+  MsTimer2::set(20, PID);     //타이머 인터럽트: 20ms마다 인터럽트
+  MsTimer2::start();     //타이머 인터럽트 시작
+  
+  Serial.println("desired,current");
+}
+
+
+/*************************************************************************************************/
+//A상
+
+void BladeCountA() {
+  if (digitalRead(A) == HIGH) {  //A가 Rising 할 때
+    if (digitalRead(B) == LOW) {  //B가 LOW이면
+      pos ++;    //시계 방향으로 돌고
+    } else {    //B가 HIGH이면
+      pos --;    //반시계 방향으로 돈다
+    }
+  }
+  else { //A가 Falling할 때
+    if (digitalRead(B) == HIGH) {  //B가 HIGH이면
+      pos ++;     //시계 방향으로 돌고
+    } else {    //B가 LOW이면
+      pos --;     //반시계 방향으로 돈다
+    }
+  }
+}
+
+/************************************************************************************************************/
+//B상
+
+void BladeCountB() {
+  if (digitalRead(B) == HIGH) {  //B가 Rising 할 때
+    if (digitalRead(A) == HIGH) {  //A가 HIGH이면
+      pos ++;     //시계 방향으로 돌고
+    } else {    //B가 LOW이면
+      pos --;     //반시계 방향으로 돈다
+    }
+  }
+  else {    //B가 Falling 할 때
+    if (digitalRead(A) == LOW) {  //A가 LOW이면
+      pos ++;     //시계 방향으로 돌고
+    } else {    //A가 HIGH이면
+      pos --;     //반시계 방향으로 돈다
+    }
+  }
+}
+
+/************************************************************************************************************/
+
+void PID() {
+  tic ++;     //settle time
+  ppu = pos - old_pos;     //고속일 때 속도 측정에 유리한 M방식(1초 동안 펄스가 몇개 들어오는지)
+  old_pos = pos;
+
+  //Anti-Windup : clamping
+  if (PID_Error * saturation == 1) {
+    clamping = 0;
+  } else {
+    clamping = 1;
+  }
+
+  //PID_Control
+  error = desired_ppu - ppu;
+  P_control = Kp * error;
+  I_control += clamping * Ki * error;
+  I_control = constrain(I_control, -500, 500);
+  D_control = Kd * (error - error_old);
+  error_old = error;
+  PID_control = (P_control + I_control + D_control);
+  
+  //Clamping: 오차와 PID 제어의 부호 비교
+  if (PID_control * error > 0) {
+    PID_Error = 1;
+  } else {
+    PID_Error = 0;
+  }
+
+  //데드존 계산
+    if (desired_ppu >= 0) {
+    PWM = rotate_min + (rotate_max - rotate_min) * PID_control / pulse_max;
+    PWM_Input = constrain(PWM, 0, 255);
+  } else if (desired_ppu < 0) {
+    PWM = -rotate_min + (rotate_max - rotate_min) * PID_control / pulse_max;
+    PWM_Input = constrain(PWM, -255, 0);
+  }
+
+  //Clamping: 모터 포화 상태 확인
+  if (PWM != PWM_Input) {
+    saturation = 1;
+  } else {
+    saturation = 0;
+  }
+
+  //모터 작동
+  if (target > 0) {
+    digitalWrite(7, HIGH);     //시계 방향
+    digitalWrite(8, LOW);
+    analogWrite(6, PWM_Input);
+
+  }
+  else if (target < 0) {
+    digitalWrite(7, LOW);     //반시계 방향
+    digitalWrite(8, HIGH);
+    analogWrite(6, -PWM_Input);
+  }
+  else{
+    digitalWrite(7, LOW);
+    digitalWrite(8, LOW);
+    analogWrite(6, 0);
+  }
+ 
+
+  //+settle time
+  increased_ppu = ppu - ppu_old;     //ppu 기울기
+  if (abs(increased_ppu) == 0); {
+    peak = ppu;     //ppu의 극값
+  }
+
+  if ((abs(desired_ppu - peak)) <= (abs(desired_ppu) / 20)) {     //최종값의 5% 이내에 들어가는지 확인
+    Settle = "O";
+  }
+  else {
+    Settle = "X";
+  }
+
+   ppu_old = ppu;
+
+  if (Settle == "O") {
+    SettleTimer ++;
+  }
+  if (Settle == "X") {
+    SettleTimer = 0;
+  }
+
+  if (SettleTimer >= 25) {     //정착 상태가 0.5초 동안 지속될 경우
+    SettleTime = tic - 25;
+  }
+
+  if ((old_SettleTime > 0) && (old_SettleTime < SettleTime)) { //정착 상태에 들어간다면 Settletime update 중지
+    SettleTime = old_SettleTime;
+  }
+
+  old_SettleTime = SettleTime;
+
+  
+}
+
+
+ 
+/*******************************************************************************************************************/
+
+void overshooting() {
+  if (desired_ppu > old_desired_ppu) {    //목표치가 과거 목표치보다 클 때
+    if (ppu > highest) {     //현재 속도가 이전 최댓값보다 크다면
+      highest = ppu;     //오버슈팅 최댓값 갱신
+      
+    }
+  } else if (desired_ppu < old_desired_ppu) {     //목표치가 과거 목표치보다 작을 때
+    if (ppu < lowest) {     //현재 속도가 이전 최솟값보다 작다면
+      lowest = ppu;     //오버슈팅 최솟값 갱신
+    }
+  }
+}
+
+/******************************************************************************************************************/
+
+void loop() {
+  if (Serial.available()) {    //시리얼 신호가 들어왔다면 실행
+    target = Serial.parseInt();
+    if (Serial.read() == '\n') {
+      tic = 0;     //시간 초기화
+      SettleTime = 0;     //초기화
+      highest = ppu;     //오버슈팅 초기화
+      lowest = ppu;     //오버슈팅 초기화
+      old_desired_ppu = desired_ppu;
+      desired_ppu = target;
+    }
+  }
+  overshooting();
+
+//  Serial.print("desired ppu:");
+  Serial.print(desired_ppu);
+  Serial.print("  ");
+//  Serial.print("current ppu:");
+  Serial.print(ppu);
+//  Serial.print("  ");
+//  Serial.print("pos:");
+//  Serial.print(pos);
+//  Serial.print("  ");
+//  Serial.print("highest:");
+//  Serial.print(highest);
+//  Serial.print("  ");
+//  Serial.print("lowest:");
+//  Serial.print(lowest);
+//  Serial.print("  ");
+//  Serial.print("Settle:");
+//  Serial.print(Settle);     //X -> Settle X, O -> Settle O
+//  Serial.print("  ");
+//  Serial.print("SettleTime:");
+//  Serial.println(SettleTime);     //안정 상태까지 걸린 시간
+  Serial.println(bottom_line);     //graph용
+  
+}
