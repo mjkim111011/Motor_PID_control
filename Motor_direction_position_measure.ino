@@ -1,70 +1,75 @@
-#define A 20     //A상
-#define B 21     //B상
+#define A 20     //encoder channel A
+#define B 21     //encoder channel B
 
-int pos = 0;     //엔코더 위치 초기값
+int pos = 0;     //encoder initial position
 String rotateDirec="";
 
 
 void setup() {
-  pinMode(A,INPUT);     //A상 값
-  pinMode(B,INPUT);     //B상 값
+  pinMode(A,INPUT);     //channel A value
+  pinMode(B,INPUT);     //channel B value
   attachInterrupt(3,BladeCountA,CHANGE);     
   attachInterrupt(2,BladeCountB,CHANGE);     
-  Serial.begin(4800);     //시리얼 통신 시작
+  Serial.begin(4800);     //start serial communication
 
 }
-/*******************************************************************************************************/
+
 
 void BladeCountA() {
-  if(digitalRead(A)==HIGH) {     //A가 Rising 할 때
-    if(digitalRead(B)==LOW) {     //B가 Falling 한다면
-    pos ++;    //시계 방향으로 돌고
-    rotateDirec="clockwise";    //"clockwise" 출력
-    }else{     //B가 Rising한다면
-    pos --;    //반시계 방향으로 돌고
-    rotateDirec="counterclockwise";    //"counterclockwise" 출력
+  
+  if(digitalRead(A)==HIGH) {     //when channel A is Rising,
+    if(digitalRead(B)==LOW) {     //if channel B Falls,
+    pos ++;    //motor rotates in clockwise direction
+    rotateDirec="clockwise";    //print "clockwise"
+    
+    }else{     //if channel B Rises,
+    pos --;    //motor rotates in counter clockwise direction
+    rotateDirec="counterclockwise";    //print "counterclockwise"
     }
   }
-  else{  //A가 Falling할 때
-    if(digitalRead(B)==HIGH) {     //B가 Rising 한다면
-    pos ++;     //시계 방향으로 돌고
-    rotateDirec="clockwise";     //"clockwise" 출력
-    }else{     //B가 Falling한다면
-    pos --;     //반시계 방향으로 돌고
-    rotateDirec="counterclockwise";     //"counterclockwise" 출력
+  else{  //when channel A is Falling,
+    if(digitalRead(B)==HIGH) {     //if channel B Rises
+    pos ++;     //motor rotates in clockwise direction
+    rotateDirec="clockwise";     //print "clockwise"
+    
+    }else{     //if channel B Falls,
+    pos --;     //motor rotates in counter clockwise direction
+    rotateDirec="counterclockwise";     //print "counterclockwise"
     }
   }
 }
 
-/**************************************************************************************************************/
+
 
 void BladeCountB() {
-  if(digitalRead(B)==HIGH) {     //B가 Rising 할 때
-    if(digitalRead(A)==HIGH) {     //A가 Rising 한다면
-    pos ++;     //시계방향으로 돌고
-    rotateDirec="clockwise";     //"clockwise" 출력
-    }else{     //B가 Falling한다면
-    pos --;     //반시계 방향으로 돌고
-    rotateDirec="counterclockwise";     //"counterclockwise" 출력
+  if(digitalRead(B)==HIGH) {     //when channel B is Rising, 
+    if(digitalRead(A)==HIGH) {     //if channel A Rises,
+    pos ++;     //motor rotates in clockwise direction
+    rotateDirec="clockwise";     //print "clockwise"
+    
+    }else{     //if channel B Falls,
+    pos --;     //motor rotates in counter clockwise direction
+    rotateDirec="counterclockwise";     //print "counterclockwise"
     }
   }
-  else{     //B가 Falling 할 때
-    if(digitalRead(A)==LOW) {     //A가 Falling 한다면
-    pos ++;     //시계 방향으로 돌고
-    rotateDirec="clockwise";     //"clockwise" 출력
-    }else{     //A가 Rising 한다면
-    pos --;     //반시계 방향으로 돌고
-    rotateDirec="counterclockwise";     //"counterclockwise" 출력
+  else{     //when channel B is Falling,
+    if(digitalRead(A)==LOW) {     //if channel A Falls,
+    pos ++;     //motor rotates in clockwise direction
+    rotateDirec="clockwise";     //print "clockwise"
+    
+    }else{     //if channel A Rises,
+    pos --;     //motor rotates in counter clockwise direction
+    rotateDirec="counterclockwise";     //print "counterclockwise"
     }
   }
 }
 
-/*******************************************************************************/
+
 
 void loop() {
-  Serial.print("방향: ");
-  Serial.print(rotateDirec);     //회전 방향 출력
+  Serial.print("direction: ");
+  Serial.print(rotateDirec);     //print rotating direction
   Serial.print("\t");
-  Serial.print("위치");
-  Serial.println(pos);     //위치 출력
+  Serial.print("position");
+  Serial.println(pos);     //print position
 }
