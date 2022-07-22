@@ -73,7 +73,7 @@ void BladeCountA() {
       pos --;    
     }
   }
-  else { //A가 Falling할 때
+  else { 
     if (digitalRead(B) == HIGH) { 
       pos ++;    
     } else {   
@@ -93,7 +93,7 @@ void BladeCountB() {
       pos --;   
     }
   }
-  else {    //B가 Falling 할 때
+  else {    
     if (digitalRead(A) == LOW) {  
       pos ++;     
     } else {  
