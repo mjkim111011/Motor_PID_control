@@ -251,10 +251,10 @@ void loop() {
   Serial.print(lowest);
   Serial.print("  ");
   Serial.print("Settle:");
-  Serial.print(Settle);     //X -> Settle X, O -> Settle O
+  Serial.print(Settle);     
   Serial.print("  ");
   Serial.print("SettleTime:");
-  Serial.print(SettleTime);     //안정 상태까지 걸린 시간
-  Serial.println(bottom_line);     //graph용
+  Serial.print(SettleTime);     
+  Serial.println(bottom_line); 
   
 }
