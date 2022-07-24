@@ -64,7 +64,6 @@ void setup() {
 
 
 
-
 void BladeCountA() {
   if (digitalRead(A) == HIGH) {  
     if (digitalRead(B) == LOW) {  
